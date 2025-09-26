@@ -1,0 +1,61 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id        Int        @id @default(autoincrement())
+  username  String     @unique
+  password  String
+  firstName String
+  lastName  String
+  birthDate DateTime
+  chats     ChatUser[]
+}
+
+model Chat {
+  id         Int        @id @default(autoincrement())
+  name       String?
+  chatTypeId Int
+  chatType   ChatType   @relation(fields: [chatTypeId], references: [id])
+  chatUser   ChatUser[]
+  messages   Message[]
+}
+
+model ChatType {
+  id    Int    @id @default(autoincrement())
+  name  String
+  chats Chat[]
+}
+
+model ChatUser {
+  id     Int @id @default(autoincrement())
+  chatId Int
+  userId Int
+
+  chat Chat @relation(fields: [chatId], references: [id])
+  user User @relation(fields: [userId], references: [id])
+
+  @@unique([chatId, userId])
+}
+
+model Message {
+  id          Int         @id @default(autoincrement())
+  messageType MessageType
+  message     String
+  chatId      Int
+  createdAt   DateTime    @default(now())
+  chat        Chat        @relation(fields: [chatId], references: [id])
+}
+
+enum MessageType {
+  text
+  audio
+  video
+  img
+  document
+}

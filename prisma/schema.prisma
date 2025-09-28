@@ -8,27 +8,29 @@ datasource db {
 }
 
 model User {
-  id        Int        @id @default(autoincrement())
-  username  String     @unique
-  password  String
-  firstName String
-  lastName  String
-  birthDate DateTime
-  chats     ChatUser[]
+  id         Int        @id @default(autoincrement())
+  username   String     @unique
+  password   String
+  firstName  String
+  lastName   String
+  profileImg String?
+  birthDate  DateTime
+  chats      ChatUser[]
+  message    Message[]
 }
 
 model Chat {
   id         Int        @id @default(autoincrement())
-  name       String?
+  name       String
   chatTypeId Int
-  chatType   ChatType   @relation(fields: [chatTypeId], references: [id])
+  chatType   ChatType   @relation(fields: [chatTypeId], references: [id], onDelete: Cascade)
   chatUser   ChatUser[]
   messages   Message[]
 }
 
 model ChatType {
   id    Int    @id @default(autoincrement())
-  name  String
+  name  String @unique
   chats Chat[]
 }
 
@@ -37,8 +39,8 @@ model ChatUser {
   chatId Int
   userId Int
 
-  chat Chat @relation(fields: [chatId], references: [id])
-  user User @relation(fields: [userId], references: [id])
+  chat Chat @relation(fields: [chatId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([chatId, userId])
 }
@@ -46,10 +48,21 @@ model ChatUser {
 model Message {
   id          Int         @id @default(autoincrement())
   messageType MessageType
-  message     String
-  chatId      Int
-  createdAt   DateTime    @default(now())
-  chat        Chat        @relation(fields: [chatId], references: [id])
+
+  message String
+
+  audioUrl    String?
+  videoUrl    String?
+  imageUrl    String?
+  documentUrl String?
+  fileName    String?
+  fileSize    Int?
+
+  chatId    Int
+  createdAt DateTime @default(now())
+  senderId  Int
+  chat      Chat     @relation(fields: [chatId], references: [id], onDelete: Cascade)
+  sender    User     @relation(fields: [senderId], references: [id], onDelete: Cascade)
 }
 
 enum MessageType {

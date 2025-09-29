@@ -5,7 +5,6 @@ import { join } from 'path';
 import { PrismaService } from 'src/Database/prisma.service';
 import { CreateMessageDto } from './dto/create.message.dto';
 
-
 @Injectable()
 export class MessageService {
   constructor(private readonly prisma: PrismaService) { }
@@ -22,10 +21,24 @@ export class MessageService {
       throw new ForbiddenException({ success: false, message: 'User is not part of this chat.' });
     }
 
-    const data = await this.prisma.message.findMany({ where: { chatId } });
+    const data = await this.prisma.message.findMany({
+      where: { chatId },
+      include: {
+        sender: {
+          select: {
+            id: true,
+            username: true,
+            firstName: true,
+            lastName: true,
+            profileImg: true,
+          }
+        }
+      },
+      orderBy: { createdAt: 'asc' }
+    });
+
     return { success: true, message: 'success', data };
   }
-
 
   async create(payload: CreateMessageDto, senderId: number, fileName?: string) {
     const sender = await this.prisma.user.findUnique({ where: { id: senderId } });
@@ -39,9 +52,41 @@ export class MessageService {
       throw new NotFoundException({ success: false, message: 'Chat not found!' });
     }
 
+    const isParticipant = await this.prisma.chatUser.findFirst({
+      where: { chatId: payload.chatId, userId: senderId }
+    });
+
+    if (!isParticipant) {
+      throw new ForbiddenException({ success: false, message: 'You are not a member of this chat!' });
+    }
+
+    const hasTextMessage = payload.message && payload.message.trim().length > 0;
+    const hasFile = fileName && fileName.trim().length > 0;
+
+    if (!hasTextMessage && !hasFile) {
+      throw new BadRequestException({
+        success: false,
+        message: 'Message must contain either text content or a file!'
+      });
+    }
+
+    if (payload.messageType === 'text' && hasFile) {
+      throw new BadRequestException({
+        success: false,
+        message: 'Text message type cannot have files!'
+      });
+    }
+
+    if (payload.messageType !== 'text' && !hasFile) {
+      throw new BadRequestException({
+        success: false,
+        message: `${payload.messageType} message type requires a file!`
+      });
+    }
+
     const messageData: any = {
       messageType: payload.messageType,
-      message: payload.message,
+      message: payload.message || '',
       chatId: payload.chatId,
       senderId: senderId,
     };
@@ -63,11 +108,23 @@ export class MessageService {
       }
     }
 
-    const createdMessage = await this.prisma.message.create({ data: messageData });
+    const createdMessage = await this.prisma.message.create({
+      data: messageData,
+      include: {
+        sender: {
+          select: {
+            id: true,
+            username: true,
+            firstName: true,
+            lastName: true,
+            profileImg: true,
+          }
+        }
+      }
+    });
+
     return { success: true, message: 'Message successfully sent!', data: createdMessage };
   }
-
-
 
   async delete(id: number, userId: number) {
     const message = await this.prisma.message.findUnique({
@@ -100,7 +157,6 @@ export class MessageService {
     }
 
     try {
-      // Fayl o'chirish
       const fileUrls = [
         { url: message.audioUrl, path: 'uploads/message/audio' },
         { url: message.videoUrl, path: 'uploads/message/video' },
@@ -119,12 +175,16 @@ export class MessageService {
         }
       }
 
-      // Database dan o'chirish
       await this.prisma.message.delete({ where: { id } });
 
       return {
         success: true,
-        message: 'Message and files deleted successfully!'
+        message: 'Message and files deleted successfully!',
+        deletedMessage: {
+          id: message.id,
+          chatId: message.chatId,
+          senderId: message.senderId
+        }
       };
     } catch (error) {
       throw new BadRequestException({
@@ -135,4 +195,56 @@ export class MessageService {
     }
   }
 
+  async getMessageById(messageId: number, userId: number) {
+    const message = await this.prisma.message.findUnique({
+      where: { id: messageId },
+      include: {
+        sender: {
+          select: {
+            id: true,
+            username: true,
+            firstName: true,
+            lastName: true,
+            profileImg: true,
+          }
+        },
+        chat: {
+          include: {
+            chatUser: {
+              where: { userId }
+            }
+          }
+        }
+      }
+    });
+
+    if (!message) {
+      throw new NotFoundException({ success: false, message: 'Message not found!' });
+    }
+
+    if (message.chat.chatUser.length === 0) {
+      throw new ForbiddenException({ success: false, message: 'You are not a member of this chat!' });
+    }
+
+    return { success: true, data: message };
+  }
+
+  async getChatParticipants(chatId: number) {
+    const participants = await this.prisma.chatUser.findMany({
+      where: { chatId },
+      include: {
+        user: {
+          select: {
+            id: true,
+            username: true,
+            firstName: true,
+            lastName: true,
+            profileImg: true,
+          }
+        }
+      }
+    });
+
+    return participants.map(p => p.user);
+  }
 }
